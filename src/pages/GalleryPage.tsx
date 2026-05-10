@@ -62,6 +62,8 @@ export const GalleryPage = () => {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const cloneInProgressRef = useRef<number | null>(null);
+  const initialGallerySearchRef = useRef({ searchQuery, sort });
+  const hasSkippedInitialGallerySearchRef = useRef(false);
 
   // GA4: 갤러리 진입 이벤트 (mount 1회)
   useEffect(() => {
@@ -94,6 +96,16 @@ export const GalleryPage = () => {
 
     searchTimeoutRef.current = setTimeout(() => {
       setDebouncedQuery(searchQuery);
+      const isInitialSearchState =
+        searchQuery === initialGallerySearchRef.current.searchQuery &&
+        sort === initialGallerySearchRef.current.sort;
+
+      if (!hasSkippedInitialGallerySearchRef.current && isInitialSearchState) {
+        hasSkippedInitialGallerySearchRef.current = true;
+        return;
+      }
+
+      hasSkippedInitialGallerySearchRef.current = true;
       sendTemplateGallerySearch(searchQuery.trim().length, sort);
     }, 300);
 
