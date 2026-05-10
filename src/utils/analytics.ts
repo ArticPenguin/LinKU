@@ -14,6 +14,7 @@
  *
  * ### 신규 이벤트 (택소노미 정립 후 — `MP_` prefix)
  * - Lifecycle  : sendExtensionOpen
+ *                (extension_first_open/session_start/open/day_active/day_summary)
  * - Search     : sendSearchSubmit
  * - Auth       : sendAuthLoginStart, sendAuthLoginSuccess, sendAuthLoginFail,
  *                sendAuthLogout, sendAuthEmailVerificationStart/Success
@@ -42,10 +43,20 @@
 
 import { getOrCreateClientId } from "./clientId";
 import { getStorage, setStorage } from "./chrome";
+import {
+  buildDailyUsageUpdate,
+  createAnalyticsCohortContext,
+  getAnalyticsDateKey,
+  getDaysBetweenDateKeys,
+  type AnalyticsCohortContext,
+  type DailyUsageState,
+} from "./analyticsRetention";
 import { debugLog, warnLog, errorLog } from "@/utils/logger";
 
 /** GA4 이벤트 파라미터 타입 — string, number, boolean만 허용 */
 type GAEventParam = string | number | boolean;
+type GAUserProperty = { value: string };
+type GAEvent = { name: string; params: Record<string, GAEventParam> };
 
 const GA_ENDPOINT = "https://www.google-analytics.com/mp/collect";
 const MEASUREMENT_ID = "G-ECMY8N9FX4";
@@ -55,12 +66,99 @@ const API_SECRET = import.meta.env.VITE_GA_API_SECRET;
 
 /** 세션 타임아웃: 30분 */
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+const ANALYTICS_COHORT_STORAGE_KEY = "analyticsCohortContext";
+const ANALYTICS_DAILY_USAGE_STORAGE_KEY = "analyticsDailyUsage";
 
 /** 환경 구분: development(개발/로컬) / production(배포) */
 const ENVIRONMENT = import.meta.env.VITE_ENVIRONMENT || "production";
 
 /** development 환경에서만 debug_mode 파라미터로 DebugView 활성화 */
 const DEBUG_MODE = ENVIRONMENT === "development";
+
+function getExtensionVersion(): string {
+  if (typeof chrome === "undefined" || !chrome.runtime?.getManifest) {
+    return "unknown";
+  }
+
+  return chrome.runtime.getManifest().version || "unknown";
+}
+
+function getAppLanguage(): string {
+  const navigatorLanguage =
+    typeof navigator === "undefined" ? undefined : navigator.language;
+
+  if (typeof chrome !== "undefined" && chrome.i18n?.getUILanguage) {
+    return chrome.i18n.getUILanguage() || navigatorLanguage || "unknown";
+  }
+
+  return navigatorLanguage || "unknown";
+}
+
+async function getOrCreateAnalyticsCohortContext(
+  isFirstOpen: boolean,
+  currentDateKey: string,
+  extensionVersion: string
+): Promise<AnalyticsCohortContext> {
+  const existingContext = await getStorage<AnalyticsCohortContext>(
+    ANALYTICS_COHORT_STORAGE_KEY
+  );
+
+  if (existingContext?.cohortDate && existingContext?.cohortSource) {
+    return existingContext;
+  }
+
+  const cohortContext = createAnalyticsCohortContext(
+    currentDateKey,
+    extensionVersion,
+    isFirstOpen ? "first_open" : "migration"
+  );
+
+  await setStorage({ [ANALYTICS_COHORT_STORAGE_KEY]: cohortContext });
+
+  return cohortContext;
+}
+
+function buildAnalyticsContextParams(
+  cohortContext: AnalyticsCohortContext,
+  dateKey: string,
+  appLanguage: string,
+  extensionVersion: string
+): Record<string, GAEventParam> {
+  const daysSinceCohort = getDaysBetweenDateKeys(cohortContext.cohortDate, dateKey);
+
+  return {
+    cohort_date: cohortContext.cohortDate,
+    cohort_week: cohortContext.cohortWeek,
+    cohort_source: cohortContext.cohortSource,
+    days_since_cohort: daysSinceCohort,
+    is_returning: daysSinceCohort > 0,
+    app_language: appLanguage,
+    extension_version: extensionVersion,
+  };
+}
+
+function buildAnalyticsUserProperties(
+  cohortContext: AnalyticsCohortContext | undefined,
+  appLanguage: string,
+  extensionVersion: string
+): Record<string, GAUserProperty> {
+  const properties: Record<string, GAUserProperty> = {
+    app_language: { value: appLanguage },
+    extension_version: { value: extensionVersion },
+  };
+
+  if (!cohortContext) {
+    return properties;
+  }
+
+  return {
+    ...properties,
+    cohort_date: { value: cohortContext.cohortDate },
+    cohort_week: { value: cohortContext.cohortWeek },
+    cohort_source: { value: cohortContext.cohortSource },
+    install_version: { value: cohortContext.installVersion || extensionVersion },
+  };
+}
 
 // ─── Session management ────────────────────────────────────────────────────
 
@@ -137,9 +235,28 @@ async function sendGAEvent(
   try {
     const clientId = await getOrCreateClientId();
     const { sessionId } = await getOrCreateSessionId();
+    const currentDateKey = getAnalyticsDateKey();
+    const extensionVersion = getExtensionVersion();
+    const appLanguage = getAppLanguage();
+    const cohortContext = await getStorage<AnalyticsCohortContext>(
+      ANALYTICS_COHORT_STORAGE_KEY
+    );
+    const analyticsContextParams = cohortContext
+      ? buildAnalyticsContextParams(
+          cohortContext,
+          currentDateKey,
+          appLanguage,
+          extensionVersion
+        )
+      : { app_language: appLanguage, extension_version: extensionVersion };
 
     const payload = {
       client_id: clientId,
+      user_properties: buildAnalyticsUserProperties(
+        cohortContext,
+        appLanguage,
+        extensionVersion
+      ),
       events: [
         {
           name: eventName,
@@ -147,6 +264,7 @@ async function sendGAEvent(
             session_id: sessionId,
             engagement_time_msec: 100, // GA4 세션 참여도 집계를 위한 권장 최솟값
             ...(DEBUG_MODE && { debug_mode: 1 }), // GA4 DebugView에서 실시간 확인용
+            ...analyticsContextParams,
             ...eventParams,
           },
         },
@@ -215,6 +333,30 @@ export async function sendExtensionOpen(
   try {
     const clientId = await getOrCreateClientId();
     const { sessionId, isNewSession } = await getOrCreateSessionId();
+    const currentDateKey = getAnalyticsDateKey();
+    const extensionVersion = getExtensionVersion();
+    const appLanguage = getAppLanguage();
+    const firstOpenSent = await getStorage<boolean>("firstOpenSent");
+    const shouldMarkFirstOpenSent = !firstOpenSent;
+    const cohortContext = await getOrCreateAnalyticsCohortContext(
+      shouldMarkFirstOpenSent,
+      currentDateKey,
+      extensionVersion
+    );
+    const analyticsContextParams = buildAnalyticsContextParams(
+      cohortContext,
+      currentDateKey,
+      appLanguage,
+      extensionVersion
+    );
+    const previousDailyUsage = await getStorage<DailyUsageState>(
+      ANALYTICS_DAILY_USAGE_STORAGE_KEY
+    );
+    const dailyUsageUpdate = buildDailyUsageUpdate(
+      previousDailyUsage,
+      currentDateKey,
+      isNewSession
+    );
 
     // 모든 lifecycle 이벤트에 공통으로 붙는 파라미터
     const baseParams: Record<string, GAEventParam> = {
@@ -223,16 +365,36 @@ export async function sendExtensionOpen(
       screen_name: screenName,
       entry_point: entryPoint,
       ...(DEBUG_MODE && { debug_mode: 1 }),
+      ...analyticsContextParams,
     };
 
     const url = `${GA_ENDPOINT}?measurement_id=${MEASUREMENT_ID}&api_secret=${API_SECRET}`;
 
     // 전송할 이벤트를 조건에 따라 배열로 누적 — GA4 MP는 단일 요청에 이벤트 배열 지원
-    const events: { name: string; params: Record<string, GAEventParam> }[] = [];
+    const events: GAEvent[] = [];
+
+    if (dailyUsageUpdate.previousSummary) {
+      const summaryDaysSinceCohort = getDaysBetweenDateKeys(
+        cohortContext.cohortDate,
+        dailyUsageUpdate.previousSummary.summaryDate
+      );
+
+      events.push({
+        name: "extension_day_summary",
+        params: {
+          ...baseParams,
+          summary_date: dailyUsageUpdate.previousSummary.summaryDate,
+          days_since_cohort: summaryDaysSinceCohort,
+          is_returning: summaryDaysSinceCohort > 0,
+          session_count: dailyUsageUpdate.previousSummary.sessionCount,
+          open_count: dailyUsageUpdate.previousSummary.openCount,
+        },
+      });
+
+      if (DEBUG_MODE) debugLog("[GA] extension_day_summary queued");
+    }
 
     // 기기 최초 설치 후 첫 실행에만 1회 전송 (전송 성공 후 chrome.storage에 플래그 저장)
-    const firstOpenSent = await getStorage<boolean>("firstOpenSent");
-    const shouldMarkFirstOpenSent = !firstOpenSent;
     if (!firstOpenSent) {
       events.push({ name: "extension_first_open", params: baseParams });
       if (DEBUG_MODE) debugLog("[GA] extension_first_open queued");
@@ -247,7 +409,29 @@ export async function sendExtensionOpen(
     // 팝업 열릴 때마다 항상 전송
     events.push({ name: "extension_open", params: baseParams });
 
-    const payload = { client_id: clientId, events };
+    if (dailyUsageUpdate.shouldSendDayActive) {
+      events.push({
+        name: "extension_day_active",
+        params: {
+          ...baseParams,
+          active_date: currentDateKey,
+          daily_session_count: dailyUsageUpdate.currentUsage.sessionCount,
+          daily_open_count: dailyUsageUpdate.currentUsage.openCount,
+        },
+      });
+
+      if (DEBUG_MODE) debugLog("[GA] extension_day_active queued");
+    }
+
+    const payload = {
+      client_id: clientId,
+      user_properties: buildAnalyticsUserProperties(
+        cohortContext,
+        appLanguage,
+        extensionVersion
+      ),
+      events,
+    };
 
     const response = await fetch(url, {
       method: "POST",
@@ -262,6 +446,12 @@ export async function sendExtensionOpen(
     if (shouldMarkFirstOpenSent) {
       await setStorage({ firstOpenSent: true });
     }
+
+    if (dailyUsageUpdate.shouldSendDayActive) {
+      dailyUsageUpdate.currentUsage.dayActiveSent = true;
+    }
+
+    await setStorage({ [ANALYTICS_DAILY_USAGE_STORAGE_KEY]: dailyUsageUpdate.currentUsage });
 
     if (DEBUG_MODE) {
       debugLog("[GA] Lifecycle events sent:", events.map((e) => e.name));
