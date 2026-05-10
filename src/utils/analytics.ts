@@ -59,7 +59,7 @@ const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 /** 환경 구분: development(개발/로컬) / production(배포) */
 const ENVIRONMENT = import.meta.env.VITE_ENVIRONMENT || "production";
 
-/** development 환경에서만 debug endpoint + DebugView 활성화 */
+/** development 환경에서만 debug_mode 파라미터로 DebugView 활성화 */
 const DEBUG_MODE = ENVIRONMENT === "development";
 
 // ─── Session management ────────────────────────────────────────────────────
@@ -115,7 +115,7 @@ async function getOrCreateSessionId(): Promise<SessionResult> {
  * GA4 MP 이벤트 전송 — 모든 도메인 헬퍼의 내부 베이스 함수
  *
  * 이 함수는 파일 외부에 export되지 않는다. 호출 지점에서는 도메인 헬퍼만 사용할 것.
- * API Secret이 없거나 fetch 실패 시 에러를 throw하지 않고 로그만 남긴다.
+ * API Secret이 없거나 전송 실패 시 에러를 throw하지 않고 로그만 남긴다.
  *
  * @param eventName 이벤트 이름 (최대 40자, 영문/숫자/언더스코어)
  * @param eventParams 이벤트 파라미터 객체
@@ -161,6 +161,18 @@ async function sendGAEvent(
         body: JSON.stringify(payload),
       }
     );
+
+    if (!response.ok) {
+      const responseText = await response.text().catch(() => "");
+      warnLog(
+        "[GA] Event request failed:",
+        eventName,
+        response.status,
+        response.statusText,
+        responseText
+      );
+      return;
+    }
 
     if (DEBUG_MODE) {
       debugLog("[GA] Event sent:", eventName, eventParams);
