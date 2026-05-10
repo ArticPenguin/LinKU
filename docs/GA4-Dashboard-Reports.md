@@ -2,7 +2,7 @@
 
 이 문서는 LinKU Chrome Extension이 `GA4 Measurement Protocol`로 전송하는
 커스텀 이벤트를 기준으로, GA4 대시보드와 Explore에서 만들 수 있는 지표와
-추가 구현이 필요한 지표를 정리한다.
+아직 해석에 주의가 필요한 지표를 정리한다.
 
 LinKU는 웹사이트가 아니라 Chrome Extension이므로 GA4의 기본 웹 자동 측정값을
 그대로 제품 지표로 해석하지 않는다. 제품 분석의 기준은 `src/utils/analytics.ts`
@@ -17,7 +17,9 @@ LinKU는 웹사이트가 아니라 Chrome Extension이므로 GA4의 기본 웹 �
 | 일일 팝업 오픈 수 | Dimension: `date`, Metric: `eventCount`, Filter: `eventName = extension_open` | 사용자가 확장 팝업을 연 횟수 |
 | 일일 세션 시작 수 | Dimension: `date`, Metric: `eventCount`, Filter: `eventName = extension_session_start` | LinKU 기준 30분 inactivity 이후 새 세션 수 |
 | 일일 신규 설치/첫 실행 수 | Dimension: `date`, Metric: `eventCount`, Filter: `eventName = extension_first_open` | 해당 기기에서 처음 LinKU를 실행한 수 |
-| 일일 활성 사용자 근사치 | Dimension: `date`, Metric: `activeUsers` 또는 `totalUsers`, Filter: `eventName = extension_open` | GA4가 `client_id` 기준으로 본 활성 사용자 수 |
+| 정확한 일일 활성 기기 수 | Dimension: `customEvent:active_date`, Metric: `eventCount`, Filter: `eventName = extension_day_active` | LinKU 기준 하루 1회 활성 기기 수 |
+| 1인당 하루 팝업 오픈 수 | `extension_day_summary.open_count` 합 / `extension_day_active` count | active device당 일일 방문 횟수 |
+| 1인당 하루 세션 수 | `extension_day_summary.session_count` 합 / `extension_day_active` count | active device당 LinKU 세션 수 |
 
 주의: GA4 기본 `newUsers`는 LinKU의 MP-only 확장 환경에서는 의미 있게 채워지지
 않을 수 있다. 신규 사용자는 `extension_first_open`을 기준으로 본다.
@@ -58,14 +60,12 @@ LinKU는 웹사이트가 아니라 Chrome Extension이므로 GA4의 기본 웹 �
 | 지표 | 현재 상태 | 이유 |
 | --- | --- | --- |
 | 성별, 연령, 관심사 | 제품 지표로 사용하기 어려움 | GA4 demographics는 Google signals, 광고 개인화 동의, threshold에 의존한다. MP-only 확장 이벤트에서 직접 만들 수 없다. |
-| 브라우저/앱 언어 | 일부 가능 | GA4 자동 dimension에 의존하거나 별도 이벤트 파라미터를 추가해야 안정적이다. |
-| Day 1~7, Day 28 리텐션 | 불완전 | `extension_first_open`과 `extension_open`은 있지만, 일 단위 활성 이벤트와 cohort date가 없다. |
-| 재방문률 | 근사만 가능 | 현재는 `extension_first_open` 대비 이후 `extension_open`을 수동으로 조합해야 한다. |
-| 1인당 하루 방문회수 | 근사만 가능 | `extension_open / activeUsers` 또는 `extension_session_start / activeUsers`로 볼 수 있지만, LinKU 기준 daily active denominator가 없다. |
+| Day 28 이후 장기 리텐션 | 데이터 누적 필요 | `extension_day_active`가 배포된 이후부터 cohort별 누적이 시작된다. |
+| 마지막 활성일 요약 | 다음 방문 전까지 지연 | `extension_day_summary`는 다음 날 이후 첫 실행 시 전날 값을 보낸다. |
 
-## 추가 구현 대상
+## 리텐션 구현 이벤트
 
-리텐션과 재방문률을 안정적으로 보려면 아래 이벤트를 추가한다.
+리텐션과 재방문률은 아래 이벤트를 기준으로 생성한다.
 
 ### `extension_day_active`
 
@@ -81,6 +81,8 @@ LinKU는 웹사이트가 아니라 Chrome Extension이므로 GA4의 기본 웹 �
 | `is_returning` | boolean | cohort 당일 이후 재방문 여부 |
 | `app_language` | string | 브라우저/확장 UI 언어 |
 | `extension_version` | string | 확장 버전 |
+| `daily_session_count` | number | 당일 현재까지 세션 수 |
+| `daily_open_count` | number | 당일 현재까지 팝업 오픈 수 |
 
 ### `extension_day_summary`
 
@@ -96,7 +98,7 @@ LinKU는 웹사이트가 아니라 Chrome Extension이므로 GA4의 기본 웹 �
 | `app_language` | string | 브라우저/확장 UI 언어 |
 | `extension_version` | string | 확장 버전 |
 
-## 추가 구현 후 만들 수 있는 보고서
+## 리텐션 구현 후 만들 수 있는 보고서
 
 | 보고서 | GA4 구성 | 계산 |
 | --- | --- | --- |
@@ -105,4 +107,3 @@ LinKU는 웹사이트가 아니라 Chrome Extension이므로 GA4의 기본 웹 �
 | Day N retention | Dimension: `customEvent:cohort_date`, `customEvent:days_since_cohort`, Filter: `extension_day_active` | Day N active / Day 0 active |
 | 1인당 하루 세션 수 | `extension_day_summary`의 `session_count` 합 / `extension_day_active` count | LinKU 기준 daily active당 세션 |
 | 1인당 하루 팝업 오픈 수 | `extension_day_summary`의 `open_count` 합 / `extension_day_active` count | LinKU 기준 daily active당 방문 |
-

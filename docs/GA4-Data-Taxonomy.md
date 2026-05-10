@@ -68,6 +68,13 @@
 | `error_message` | string | 사람이 읽는 에러 설명 | `sync_failed` |
 | `is_logged_in` | boolean | 로그인 상태 | `true` |
 | `is_guest` | boolean | 게스트 회원 여부 | `false` |
+| `app_language` | string | 브라우저/확장 UI 언어 | `ko-KR` |
+| `extension_version` | string | 확장 버전 | `1.5.50` |
+| `cohort_date` | string | 리텐션 cohort 기준일 | `2026-05-10` |
+| `cohort_week` | string | 리텐션 cohort 기준 주 | `2026-W19` |
+| `cohort_source` | string | cohort 생성 출처 | `first_open`, `migration` |
+| `days_since_cohort` | number | cohort 이후 경과일 | `7` |
+| `is_returning` | boolean | cohort 당일 이후 재방문 여부 | `true` |
 
 > **구현 상태 표기**
 > - `구현됨` — `analytics.ts`에 헬퍼 함수가 존재하고 call site에 연결됨
@@ -76,13 +83,15 @@
 ## Lifecycle Events
 
 Retention과 기본 활성 사용자 분석을 위해 가장 먼저 도입해야 할 이벤트군이다.
-`sendExtensionOpen(screenName, entryPoint)` 한 번 호출로 아래 세 이벤트를 자동 처리한다.
+`sendExtensionOpen(screenName, entryPoint)` 한 번 호출로 아래 lifecycle 이벤트를 자동 처리한다.
 
 | Event Name | 상태 | 목적 | Trigger | 주요 Params | 우선순위 |
 | --- | --- | --- | --- | --- | --- |
 | `extension_first_open` | 구현됨 | 첫 사용 cohort 정의 | `firstOpenSent` 플래그 없을 때 1회 | `screen_name`, `entry_point` | P0 |
 | `extension_session_start` | 구현됨 | 재방문/세션 기준 정의 | 30분 초과로 새 `session_id` 생성 시 | `screen_name`, `entry_point` | P0 |
 | `extension_open` | 구현됨 | 실제 사용 시작 기록 | popup mount 시 매번 | `screen_name`, `entry_point` | P0 |
+| `extension_day_active` | 구현됨 | 정확한 일일 활성 기기 수와 Day N retention | analytics date별 1회 | `active_date`, `cohort_date`, `days_since_cohort`, `is_returning` | P0 |
+| `extension_day_summary` | 구현됨 | 일별 방문/세션 집계 | 다음 analytics date 첫 실행 시 전날 요약 | `summary_date`, `session_count`, `open_count` | P0 |
 
 ## Core Product Events
 
@@ -214,6 +223,8 @@ LinKU의 가장 기본 가치인 "교내외 링크를 빠르게 연다"를 측�
 | P0 | `extension_first_open` | 구현됨 |
 | P0 | `extension_session_start` | 구현됨 |
 | P0 | `extension_open` | 구현됨 |
+| P0 | `extension_day_active` | 구현됨 |
+| P0 | `extension_day_summary` | 구현됨 |
 | P0 | `link_open` | 구현됨 |
 | P0 | `template_save_success` | 구현됨 |
 | P0 | `template_sync_success` | 구현됨 |
@@ -230,7 +241,11 @@ LinKU의 가장 기본 가치인 "교내외 링크를 빠르게 연다"를 측�
 
 | 리포트 | 포함 이벤트 |
 | --- | --- |
-| First-open retention cohort | `extension_first_open` → `extension_open` |
+| Daily active devices | `extension_day_active` |
+| Day N retention cohort | `extension_day_active` + `cohort_date` + `days_since_cohort` |
+| Returning user rate | `extension_day_active` + `is_returning` |
+| Visits per active user | `extension_day_summary.open_count` / `extension_day_active` |
+| Sessions per active user | `extension_day_summary.session_count` / `extension_day_active` |
 | Session-based return cohort | `extension_session_start` |
 | Core action retention | `extension_first_open` cohort + `link_open` return condition |
 | Template funnel | `template_editor_open` → `template_item_add` → `template_save_success` → `template_sync_success` → `template_publish_success` |
@@ -266,6 +281,8 @@ LinKU의 가장 기본 가치인 "교내외 링크를 빠르게 연다"를 측�
 
 | 이벤트명 | 항목 | 수집 목적 | 수집 속성 | 사용 코드 | 비고 |
 | --- | --- | --- | --- | --- | --- |
+| `extension_day_active` | 일별 활성 | 정확한 DAU와 Day N retention | `active_date`, `cohort_date`, `cohort_week`, `cohort_source`, `days_since_cohort`, `is_returning`, `app_language`, `extension_version`, `daily_session_count`, `daily_open_count` | `App.tsx · sendExtensionOpen` 내부 자동 처리 | analytics date별 기기당 1회 |
+| `extension_day_summary` | 전일 사용량 요약 | 일별 세션/방문 집계 | `summary_date`, `cohort_date`, `days_since_cohort`, `session_count`, `open_count`, `app_language`, `extension_version` | `App.tsx · sendExtensionOpen` 내부 자동 처리 | 다음 날 첫 실행 시 전날 요약 전송 |
 | `extension_first_open` | 최초 실행 | 첫 사용 cohort 정의 | `screen_name`, `entry_point` | `App.tsx · sendExtensionOpen` 내부 자동 처리 | `firstOpenSent` 플래그로 기기당 1회 보장 |
 | `extension_open` | 팝업 열기 | 실제 사용 시작 기록 | `screen_name`, `entry_point` | `App.tsx · useEffect → sendExtensionOpen` | - |
 | `extension_session_start` | 세션 시작 | 세션 기준 정의 | `screen_name`, `entry_point` | `App.tsx · sendExtensionOpen` 내부 자동 처리 | 30분 inactivity 초과 시에만 전송 |
