@@ -1,6 +1,6 @@
 /**
  * Google Analytics 4 Measurement Protocol for Chrome Extension
- * Manifest V3 호환 — CSP 제약 없이 직접 fetch로 이벤트를 전송한다.
+ * Manifest V3 호환 — popup에서 payload를 만들고 background worker 또는 fallback fetch로 전송한다.
  *
  * ## 이벤트 분류
  *
@@ -9,12 +9,13 @@
  * - link_click    : sendLinkClick
  * - tab_change    : sendTabChange
  * - button_click  : sendButtonClick
- * - setting_change: sendSettingChange (settings_credentials_saved/deleted 내부에서 병렬 발송)
+ * - setting_change: sendSettingChange (settings_credentials_saved/deleted 내부에서 MP 이벤트와 함께 발송)
  * - error         : sendError
  *
  * ### 신규 이벤트 (택소노미 정립 후 — `MP_` prefix)
  * - Lifecycle  : sendExtensionOpen
- *                (extension_first_open/session_start/open/day_active/day_summary)
+ *                (MP_extension_firstOpen / MP_extensionSession_start /
+ *                 MP_extension_open / MP_extensionDay_active / MP_extensionDay_summary)
  * - Search     : sendSearchSubmit
  * - Auth       : sendAuthLoginStart, sendAuthLoginSuccess, sendAuthLoginFail,
  *                sendAuthLogout, sendAuthEmailVerificationStart/Success
@@ -38,7 +39,7 @@
  * - 이벤트 네이밍과 파라미터 패턴: docs/GA4-Data-Taxonomy.md 기준을 따른다
  *
  * ## 전송 흐름
- * 각 헬퍼 → sendGAEvent (internal) → GA4 MP /mp/collect (fetch)
+ * 각 헬퍼 → sendGAEvent/sendGAEvents (internal) → analyticsTransport → GA4 MP /mp/collect
  */
 
 import { getOrCreateClientId } from "./clientId";
@@ -49,8 +50,10 @@ import {
   getAnalyticsDateKey,
   getDaysBetweenDateKeys,
   type AnalyticsCohortContext,
+  type DailyUsageUpdate,
   type DailyUsageState,
 } from "./analyticsRetention";
+import { sendGARequest } from "./analyticsTransport";
 import { debugLog, warnLog, errorLog } from "@/utils/logger";
 
 /** GA4 이벤트 파라미터 타입 — string, number, boolean만 허용 */
@@ -160,6 +163,79 @@ function buildAnalyticsUserProperties(
   };
 }
 
+async function getStoredAnalyticsCohortContext(): Promise<
+  AnalyticsCohortContext | undefined
+> {
+  try {
+    return await getStorage<AnalyticsCohortContext>(ANALYTICS_COHORT_STORAGE_KEY);
+  } catch (error) {
+    warnLog("[GA] Analytics cohort context unavailable:", error);
+    return undefined;
+  }
+}
+
+async function getLifecycleCohortContext(
+  isFirstOpen: boolean,
+  currentDateKey: string,
+  extensionVersion: string
+): Promise<AnalyticsCohortContext | undefined> {
+  try {
+    return await getOrCreateAnalyticsCohortContext(
+      isFirstOpen,
+      currentDateKey,
+      extensionVersion
+    );
+  } catch (error) {
+    warnLog("[GA] Lifecycle cohort context unavailable:", error);
+    return undefined;
+  }
+}
+
+async function getFirstOpenState(): Promise<{
+  firstOpenSent: boolean | undefined;
+  shouldMarkFirstOpenSent: boolean;
+}> {
+  try {
+    const firstOpenSent = await getStorage<boolean>("firstOpenSent");
+
+    return {
+      firstOpenSent,
+      shouldMarkFirstOpenSent: !firstOpenSent,
+    };
+  } catch (error) {
+    warnLog("[GA] firstOpenSent state unavailable:", error);
+
+    return {
+      firstOpenSent: undefined,
+      shouldMarkFirstOpenSent: false,
+    };
+  }
+}
+
+async function getDailyUsageUpdate(
+  currentDateKey: string,
+  isNewSession: boolean
+): Promise<DailyUsageUpdate | undefined> {
+  try {
+    const previousDailyUsage = await getStorage<DailyUsageState>(
+      ANALYTICS_DAILY_USAGE_STORAGE_KEY
+    );
+
+    return buildDailyUsageUpdate(previousDailyUsage, currentDateKey, isNewSession);
+  } catch (error) {
+    warnLog("[GA] Daily usage state unavailable:", error);
+    return undefined;
+  }
+}
+
+async function persistAnalyticsStorage(data: Record<string, unknown>): Promise<void> {
+  try {
+    await setStorage(data);
+  } catch (error) {
+    warnLog("[GA] Analytics storage update failed:", error);
+  }
+}
+
 // ─── Session management ────────────────────────────────────────────────────
 
 interface SessionResult {
@@ -222,8 +298,15 @@ async function sendGAEvent(
   eventName: string,
   eventParams: Record<string, GAEventParam> = {}
 ): Promise<void> {
+  await sendGAEvents([{ name: eventName, params: eventParams }]);
+}
+
+async function sendGAEvents(events: GAEvent[]): Promise<void> {
   if (!API_SECRET) {
-    warnLog("[GA] API Secret not configured. Event not sent:", eventName);
+    warnLog(
+      "[GA] API Secret not configured. Events not sent:",
+      events.map((event) => event.name)
+    );
     return;
   }
 
@@ -238,9 +321,7 @@ async function sendGAEvent(
     const currentDateKey = getAnalyticsDateKey();
     const extensionVersion = getExtensionVersion();
     const appLanguage = getAppLanguage();
-    const cohortContext = await getStorage<AnalyticsCohortContext>(
-      ANALYTICS_COHORT_STORAGE_KEY
-    );
+    const cohortContext = await getStoredAnalyticsCohortContext();
     const analyticsContextParams = cohortContext
       ? buildAnalyticsContextParams(
           cohortContext,
@@ -257,46 +338,39 @@ async function sendGAEvent(
         appLanguage,
         extensionVersion
       ),
-      events: [
-        {
-          name: eventName,
-          params: {
-            session_id: sessionId,
-            engagement_time_msec: 100, // GA4 세션 참여도 집계를 위한 권장 최솟값
-            ...(DEBUG_MODE && { debug_mode: 1 }), // GA4 DebugView에서 실시간 확인용
-            ...analyticsContextParams,
-            ...eventParams,
-          },
+      events: events.map((event) => ({
+        name: event.name,
+        params: {
+          session_id: sessionId,
+          engagement_time_msec: 100, // GA4 세션 참여도 집계를 위한 권장 최솟값
+          ...(DEBUG_MODE && { debug_mode: 1 }), // GA4 DebugView에서 실시간 확인용
+          ...analyticsContextParams,
+          ...event.params,
         },
-      ],
+      })),
     };
 
-    const response = await fetch(
-      `${GA_ENDPOINT}?measurement_id=${MEASUREMENT_ID}&api_secret=${API_SECRET}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }
-    );
+    const result = await sendGARequest({
+      payload,
+      url: `${GA_ENDPOINT}?measurement_id=${MEASUREMENT_ID}&api_secret=${API_SECRET}`,
+    });
 
-    if (!response.ok) {
-      const responseText = await response.text().catch(() => "");
+    if (!result.success) {
       warnLog(
         "[GA] Event request failed:",
-        eventName,
-        response.status,
-        response.statusText,
-        responseText
+        events.map((event) => event.name),
+        result.status,
+        result.statusText,
+        result.responseText || result.error
       );
       return;
     }
 
     if (DEBUG_MODE) {
-      debugLog("[GA] Event sent:", eventName, eventParams);
+      debugLog("[GA] Events sent:", events.map((event) => event.name));
       debugLog("[GA] Payload:", JSON.stringify(payload, null, 2));
       // production endpoint(/mp/collect)는 204 No Content를 반환하므로 response.json() 호출 불가
-      debugLog("[GA] Response status:", response.status, response.statusText);
+      debugLog("[GA] Response status:", result.status, result.statusText);
     }
   } catch (error) {
     errorLog("[GA] Error sending event:", error);
@@ -312,9 +386,9 @@ async function sendGAEvent(
  * popup mount 시 호출하는 lifecycle 통합 함수
  *
  * 내부적으로 아래 3가지를 자동 처리한다:
- * 1. `firstOpenSent` 플래그가 없으면 `extension_first_open` 전송 후 플래그 저장
- * 2. 새 세션(30분 초과)이면 `extension_session_start` 전송
- * 3. 매번 `extension_open` 전송
+ * 1. `firstOpenSent` 플래그가 없으면 `MP_extension_firstOpen` 전송 후 플래그 저장
+ * 2. 새 세션(30분 초과)이면 `MP_extensionSession_start` 전송
+ * 3. 매번 `MP_extension_open` 전송
  *
  * GA4 MP는 단일 요청에 이벤트 배열을 지원하므로 한 번의 fetch로 처리한다.
  *
@@ -336,27 +410,21 @@ export async function sendExtensionOpen(
     const currentDateKey = getAnalyticsDateKey();
     const extensionVersion = getExtensionVersion();
     const appLanguage = getAppLanguage();
-    const firstOpenSent = await getStorage<boolean>("firstOpenSent");
-    const shouldMarkFirstOpenSent = !firstOpenSent;
-    const cohortContext = await getOrCreateAnalyticsCohortContext(
+    const { shouldMarkFirstOpenSent } = await getFirstOpenState();
+    const cohortContext = await getLifecycleCohortContext(
       shouldMarkFirstOpenSent,
       currentDateKey,
       extensionVersion
     );
-    const analyticsContextParams = buildAnalyticsContextParams(
-      cohortContext,
-      currentDateKey,
-      appLanguage,
-      extensionVersion
-    );
-    const previousDailyUsage = await getStorage<DailyUsageState>(
-      ANALYTICS_DAILY_USAGE_STORAGE_KEY
-    );
-    const dailyUsageUpdate = buildDailyUsageUpdate(
-      previousDailyUsage,
-      currentDateKey,
-      isNewSession
-    );
+    const analyticsContextParams = cohortContext
+      ? buildAnalyticsContextParams(
+          cohortContext,
+          currentDateKey,
+          appLanguage,
+          extensionVersion
+        )
+      : { app_language: appLanguage, extension_version: extensionVersion };
+    const dailyUsageUpdate = await getDailyUsageUpdate(currentDateKey, isNewSession);
 
     // 모든 lifecycle 이벤트에 공통으로 붙는 파라미터
     const baseParams: Record<string, GAEventParam> = {
@@ -373,14 +441,14 @@ export async function sendExtensionOpen(
     // 전송할 이벤트를 조건에 따라 배열로 누적 — GA4 MP는 단일 요청에 이벤트 배열 지원
     const events: GAEvent[] = [];
 
-    if (dailyUsageUpdate.previousSummary) {
+    if (dailyUsageUpdate?.previousSummary && cohortContext) {
       const summaryDaysSinceCohort = getDaysBetweenDateKeys(
         cohortContext.cohortDate,
         dailyUsageUpdate.previousSummary.summaryDate
       );
 
       events.push({
-        name: "extension_day_summary",
+        name: "MP_extensionDay_summary",
         params: {
           ...baseParams,
           summary_date: dailyUsageUpdate.previousSummary.summaryDate,
@@ -391,27 +459,27 @@ export async function sendExtensionOpen(
         },
       });
 
-      if (DEBUG_MODE) debugLog("[GA] extension_day_summary queued");
+      if (DEBUG_MODE) debugLog("[GA] MP_extensionDay_summary queued");
     }
 
     // 기기 최초 설치 후 첫 실행에만 1회 전송 (전송 성공 후 chrome.storage에 플래그 저장)
-    if (!firstOpenSent) {
-      events.push({ name: "extension_first_open", params: baseParams });
-      if (DEBUG_MODE) debugLog("[GA] extension_first_open queued");
+    if (shouldMarkFirstOpenSent) {
+      events.push({ name: "MP_extension_firstOpen", params: baseParams });
+      if (DEBUG_MODE) debugLog("[GA] MP_extension_firstOpen queued");
     }
 
     // 30분 비활동 후 새 세션이 생성된 경우에만 전송
     if (isNewSession) {
-      events.push({ name: "extension_session_start", params: baseParams });
-      if (DEBUG_MODE) debugLog("[GA] extension_session_start queued");
+      events.push({ name: "MP_extensionSession_start", params: baseParams });
+      if (DEBUG_MODE) debugLog("[GA] MP_extensionSession_start queued");
     }
 
     // 팝업 열릴 때마다 항상 전송
-    events.push({ name: "extension_open", params: baseParams });
+    events.push({ name: "MP_extension_open", params: baseParams });
 
-    if (dailyUsageUpdate.shouldSendDayActive) {
+    if (dailyUsageUpdate?.shouldSendDayActive) {
       events.push({
-        name: "extension_day_active",
+        name: "MP_extensionDay_active",
         params: {
           ...baseParams,
           active_date: currentDateKey,
@@ -420,7 +488,7 @@ export async function sendExtensionOpen(
         },
       });
 
-      if (DEBUG_MODE) debugLog("[GA] extension_day_active queued");
+      if (DEBUG_MODE) debugLog("[GA] MP_extensionDay_active queued");
     }
 
     const payload = {
@@ -433,29 +501,31 @@ export async function sendExtensionOpen(
       events,
     };
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    const result = await sendGARequest({ payload, url });
 
-    if (!response.ok) {
-      throw new Error(`GA lifecycle request failed: ${response.status} ${response.statusText}`);
+    if (!result.success) {
+      throw new Error(
+        `GA lifecycle request failed: ${result.status || ""} ${result.statusText || result.error || ""}`.trim()
+      );
     }
 
     if (shouldMarkFirstOpenSent) {
-      await setStorage({ firstOpenSent: true });
+      await persistAnalyticsStorage({ firstOpenSent: true });
     }
 
-    if (dailyUsageUpdate.shouldSendDayActive) {
+    if (dailyUsageUpdate?.shouldSendDayActive) {
       dailyUsageUpdate.currentUsage.dayActiveSent = true;
     }
 
-    await setStorage({ [ANALYTICS_DAILY_USAGE_STORAGE_KEY]: dailyUsageUpdate.currentUsage });
+    if (dailyUsageUpdate) {
+      await persistAnalyticsStorage({
+        [ANALYTICS_DAILY_USAGE_STORAGE_KEY]: dailyUsageUpdate.currentUsage,
+      });
+    }
 
     if (DEBUG_MODE) {
       debugLog("[GA] Lifecycle events sent:", events.map((e) => e.name));
-      debugLog("[GA] Response status:", response.status, response.statusText);
+      debugLog("[GA] Response status:", result.status, result.statusText);
     }
   } catch (error) {
     errorLog("[GA] Error sending lifecycle events:", error);
@@ -566,8 +636,10 @@ export async function sendSearchSubmit(
   searchTerm: string,
   searchLocation?: string
 ): Promise<void> {
+  const trimmedSearchTerm = searchTerm.trim();
+
   await sendGAEvent("MP_search_submit", {
-    search_term: searchTerm,
+    query_length: trimmedSearchTerm.length,
     ...(searchLocation && { search_location: searchLocation }),
   });
 }
@@ -665,25 +737,37 @@ export async function sendSettingsOpen(entryPoint: string): Promise<void> {
 /**
  * eCampus 인증정보 저장 완료 이벤트 전송
  *
- * 레거시 연속성을 위해 `setting_change`와 신규 `MP_settingsCredentials_save`를 병렬 전송한다.
+   * 레거시 연속성을 위해 `setting_change`와 신규 `MP_settingsCredentials_save`를 같은 요청으로 전송한다.
  */
 export async function sendSettingsCredentialsSaved(): Promise<void> {
-  // 레거시 이벤트 — v1.5.46 이전 데이터와의 연속성 유지
-  await sendGAEvent("setting_change", { setting_name: "credentials", setting_value: "saved" });
-  // 신규 이벤트
-  await sendGAEvent("MP_settingsCredentials_save", { result: "success" });
+  await sendGAEvents([
+    {
+      name: "setting_change",
+      params: { setting_name: "credentials", setting_value: "saved" },
+    },
+    {
+      name: "MP_settingsCredentials_save",
+      params: { result: "success" },
+    },
+  ]);
 }
 
 /**
  * eCampus 인증정보 삭제 완료 이벤트 전송
  *
- * 레거시 연속성을 위해 `setting_change`와 신규 `MP_settingsCredentials_delete`를 병렬 전송한다.
+   * 레거시 연속성을 위해 `setting_change`와 신규 `MP_settingsCredentials_delete`를 같은 요청으로 전송한다.
  */
 export async function sendSettingsCredentialsDeleted(): Promise<void> {
-  // 레거시 이벤트 — v1.5.46 이전 데이터와의 연속성 유지
-  await sendGAEvent("setting_change", { setting_name: "credentials", setting_value: "deleted" });
-  // 신규 이벤트
-  await sendGAEvent("MP_settingsCredentials_delete", { result: "success" });
+  await sendGAEvents([
+    {
+      name: "setting_change",
+      params: { setting_name: "credentials", setting_value: "deleted" },
+    },
+    {
+      name: "MP_settingsCredentials_delete",
+      params: { result: "success" },
+    },
+  ]);
 }
 
 // ─── Template ─────────────────────────────────────────────────────────────
@@ -1028,7 +1112,7 @@ export async function sendAlertsSubscriptionChange(
 ): Promise<void> {
   await sendGAEvent("MP_alertsSubscription_update", {
     category,
-    subscription_result: subscriptionResult,
+    result: subscriptionResult,
   });
 }
 
@@ -1073,8 +1157,8 @@ export async function sendTodoItemDelete(itemType: string): Promise<void> {
 // ─── Labs ─────────────────────────────────────────────────────────────────
 
 /** Labs 다이얼로그 진입 이벤트 전송 */
-export async function sendLabsOpen(): Promise<void> {
-  await sendGAEvent("MP_labs_open", {});
+export async function sendLabsOpen(entryPoint = "header"): Promise<void> {
+  await sendGAEvent("MP_labs_open", { entry_point: entryPoint });
 }
 
 /**
