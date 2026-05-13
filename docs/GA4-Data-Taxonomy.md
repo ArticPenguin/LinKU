@@ -38,18 +38,17 @@
 
 ## Recommended Event Naming
 
-| Prefix | 용도 | 예시 |
+| Prefix / Group | 용도 | 예시 |
 | --- | --- | --- |
-| `extension_` | 확장 프로그램 lifecycle | `extension_first_open` |
-| `navigation_` | 화면/탭/진입 | `navigation_tab_select` |
-| `link_` | 핵심 링크 사용 | `link_open` |
-| `template_` | 템플릿 생성/편집/배포 | `template_publish_success` |
-| `auth_` | 로그인/인증 | `auth_login_success` |
-| `alerts_` | 공지 기능 | `alerts_item_open` |
-| `todo_` | Todo 기능 | `todo_item_create` |
-| `labs_` | Labs 기능 | `labs_feature_use` |
-| `settings_` | 설정 변경 | `settings_credentials_saved` |
-| `system_` | 오류/상태 | `system_error` |
+| Legacy | v1.5.46 이전부터 수집한 연속성 이벤트 | `page_view`, `link_click`, `tab_change`, `button_click`, `setting_change`, `error` |
+| `MP_extension*` | 확장 프로그램 lifecycle / retention | `MP_extension_open`, `MP_extensionDay_active` |
+| `MP_search_*` | 검색 | `MP_search_submit` |
+| `MP_auth*` | 로그인/인증 | `MP_authLogin_success` |
+| `MP_settings*` | 설정 | `MP_settings_open` |
+| `MP_template*` | 템플릿 생성/편집/배포 | `MP_templatePublish_success` |
+| `MP_alerts*` | 공지 기능 | `MP_alertsItem_open` |
+| `MP_todo*` | Todo 기능 | `MP_todoItem_create` |
+| `MP_labs*` | Labs 기능 | `MP_labsFeature_use` |
 
 ## Global Parameters
 
@@ -87,11 +86,11 @@ Retention과 기본 활성 사용자 분석을 위해 가장 먼저 도입해야
 
 | Event Name | 상태 | 목적 | Trigger | 주요 Params | 우선순위 |
 | --- | --- | --- | --- | --- | --- |
-| `extension_first_open` | 구현됨 | 첫 사용 cohort 정의 | `firstOpenSent` 플래그 없을 때 1회 | `screen_name`, `entry_point` | P0 |
-| `extension_session_start` | 구현됨 | 재방문/세션 기준 정의 | 30분 초과로 새 `session_id` 생성 시 | `screen_name`, `entry_point` | P0 |
-| `extension_open` | 구현됨 | 실제 사용 시작 기록 | popup mount 시 매번 | `screen_name`, `entry_point` | P0 |
-| `extension_day_active` | 구현됨 | 정확한 일일 활성 기기 수와 Day N retention | analytics date별 1회 | `active_date`, `cohort_date`, `days_since_cohort`, `is_returning` | P0 |
-| `extension_day_summary` | 구현됨 | 일별 방문/세션 집계 | 다음 analytics date 첫 실행 시 전날 요약 | `summary_date`, `session_count`, `open_count` | P0 |
+| `MP_extension_firstOpen` | 구현됨 | 첫 사용 cohort 정의 | `firstOpenSent` 플래그 없을 때 1회 | `screen_name`, `entry_point` | P0 |
+| `MP_extensionSession_start` | 구현됨 | 재방문/세션 기준 정의 | 30분 초과로 새 `session_id` 생성 시 | `screen_name`, `entry_point` | P0 |
+| `MP_extension_open` | 구현됨 | 실제 사용 시작 기록 | popup mount 시 매번 | `screen_name`, `entry_point` | P0 |
+| `MP_extensionDay_active` | 구현됨 | 정확한 일일 활성 기기 수와 Day N retention | analytics date별 1회 | `active_date`, `cohort_date`, `days_since_cohort`, `is_returning` | P0 |
+| `MP_extensionDay_summary` | 구현됨 | 일별 방문/세션 집계 | 다음 analytics date 첫 실행 시 전날 요약 | `summary_date`, `session_count`, `open_count` | P0 |
 
 ## Core Product Events
 
@@ -99,22 +98,22 @@ LinKU의 가장 기본 가치인 "교내외 링크를 빠르게 연다"를 측�
 
 | Event Name | 상태 | 목적 | 주요 Params | 비고 |
 | --- | --- | --- | --- | --- |
-| `navigation_tab_select` | 구현됨 | 어떤 탭이 실제로 사용되는지 | `tab_name`, `feature_area?` | `ui_location`은 미전송 |
-| `search_submit` | 구현됨 | 검색 기능 사용률 측정 | `search_term`, `search_location?` | |
-| `link_open` | 구현됨 | LinKU 핵심 가치 행동 | `link_name`, `link_url`, `link_group?`, `same_host_variant?` | same-host 버튼은 `samehost_primary` / `samehost_secondary`로 구분 |
-| `banner_open` | 구현됨 | 배너 클릭 효율 측정 | `banner_id`, `banner_title`, `banner_position` | |
+| `tab_change` | 구현됨 | 어떤 탭이 실제로 사용되는지 | `tab_name`, `feature_area?` | legacy 연속성 유지 |
+| `MP_search_submit` | 구현됨 | 검색 기능 사용률 측정 | `query_length`, `search_location?` | 검색어 원문은 전송하지 않음 |
+| `link_click` | 구현됨 | LinKU 핵심 가치 행동 | `link_name`, `link_url`, `link_group?`, `same_host_variant?` | legacy 연속성 유지 |
+| `MP_banner_open` | 구현됨 | 배너 클릭 효율 측정 | `banner_id`, `banner_title`, `banner_position` | |
 | `button_click` | 구현됨 | 범용 버튼 클릭 (header 등) | `button_name`, `button_location?` | 제품 의미가 큰 버튼은 개별 이벤트로 승격, header 잡버튼에만 사용 |
 
 ## Account / Auth Events
 
 | Event Name | 상태 | 목적 | 주요 Params | 우선순위 |
 | --- | --- | --- | --- | --- |
-| `auth_login_start` | 구현됨 | 로그인 의도 파악 | `provider`, `ui_location` | P1 |
-| `auth_login_success` | 구현됨 | 실제 로그인 성공률 측정 | `provider`, `is_guest` | P1 |
-| `auth_login_fail` | 구현됨 | 로그인 장애 파악 | `provider`, `error_code`, `error_message` | P1 |
-| `auth_logout` | 구현됨 | 로그아웃 행동 파악 | `ui_location` | P2 |
-| `auth_email_verification_start` | 구현됨 | 게스트 → 회원 전환 시작점 | `ui_location` | P1 |
-| `auth_email_verification_success` | 구현됨 | 회원 전환 완료 | `domain_type` | P1 |
+| `MP_authLogin_start` | 구현됨 | 로그인 의도 파악 | `provider`, `ui_location` | P1 |
+| `MP_authLogin_success` | 구현됨 | 실제 로그인 성공률 측정 | `provider`, `is_guest` | P1 |
+| `MP_authLogin_fail` | 구현됨 | 로그인 장애 파악 | `provider`, `error_code`, `error_message` | P1 |
+| `MP_auth_logout` | 구현됨 | 로그아웃 행동 파악 | `ui_location` | P2 |
+| `MP_authEmailVerification_start` | 구현됨 | 게스트 → 회원 전환 시작점 | `ui_location` | P1 |
+| `MP_authEmailVerification_success` | 구현됨 | 회원 전환 완료 | `domain_type` | P1 |
 
 ## Template Events
 
@@ -122,26 +121,26 @@ LinKU의 가장 기본 가치인 "교내외 링크를 빠르게 연다"를 측�
 
 | Event Name | 상태 | 목적 | 주요 Params | 우선순위 |
 | --- | --- | --- | --- | --- |
-| `template_editor_open` | 구현됨 | 에디터 진입률 측정 | `template_origin`, `template_id?` | P1 |
-| `template_create_start` | 구현됨 | 새 템플릿 생성 진입 | `template_origin`=`default\|empty` | P1 |
-| `template_name_edit` | 구현됨 | 에디터 사용성 파악 | `template_id` | P3 |
-| `template_item_add` | 구현됨 | 에디터 내 핵심 편집 행위 | `add_method`(`drag`\|`button`), `template_id?` | P1 |
-| `template_item_update` | 구현됨 | 링크/아이콘/속성 수정 | `update_type`, `template_id` | P2 |
-| `template_item_delete` | 구현됨 | 아이템 삭제 행위 | `delete_source`, `template_id` | P2 |
-| `template_save_success` | 구현됨 | 로컬 저장 완료 | `template_id`, `template_origin`, `item_count` | P0 |
-| `template_save_fail` | 구현됨 | 저장 실패 원인 파악 | `template_id`, `error_code`, `error_message` | P1 |
-| `template_sync_success` | 구현됨 | 서버 동기화 성공 | `template_id`, `item_count` | P0 |
-| `template_sync_fail` | 구현됨 | 동기화 실패 | `template_id`, `error_code`, `error_message` | P1 |
-| `template_publish_success` | 구현됨 | 갤러리 게시 성공 | `template_id`, `item_count` | P0 |
-| `template_publish_fail` | 구현됨 | 게시 실패 | `template_id`, `error_code`, `error_message` | P1 |
-| `template_apply` | 구현됨 | 실제 메인 화면 적용 행동 | `template_id`, `template_origin`, `is_default` | P0 |
-| `template_delete` | 구현됨 | 템플릿 삭제 | `template_id`, `template_origin`, `sync_status` | P2 |
-| `template_gallery_open` | 구현됨 | 갤러리 진입 | `entry_point` | P1 |
-| `template_gallery_search` | 구현됨 | 갤러리 검색 및 정렬 사용 | `query_length`, `sort_option` | P2 |
+| `MP_templateEditor_view` | 구현됨 | 에디터 진입률 측정 | `template_origin`, `template_id?` | P1 |
+| `MP_template_createStart` | 구현됨 | 새 템플릿 생성 진입 | `template_origin`=`default\|empty` | P1 |
+| `template_name_edit` | 제거됨 | 에디터 사용성 파악 | `template_id` | P3 |
+| `MP_templateItem_add` | 구현됨 | 에디터 내 핵심 편집 행위 | `add_method`(`drag`\|`button`), `template_id?` | P1 |
+| `MP_templateItem_update` | 구현됨 | 링크/아이콘/속성 수정 | `update_type`, `template_id` | P2 |
+| `MP_templateItem_delete` | 구현됨 | 아이템 삭제 행위 | `delete_source`, `template_id` | P2 |
+| `MP_templateSave_success` | 구현됨 | 로컬 저장 완료 | `template_id`, `template_origin`, `item_count` | P0 |
+| `MP_templateSave_fail` | 구현됨 | 저장 실패 원인 파악 | `template_id`, `error_code`, `error_message` | P1 |
+| `MP_templateSync_success` | 구현됨 | 서버 동기화 성공 | `template_id`, `item_count` | P0 |
+| `MP_templateSync_fail` | 구현됨 | 동기화 실패 | `template_id`, `error_code`, `error_message` | P1 |
+| `MP_templatePublish_success` | 구현됨 | 갤러리 게시 성공 | `template_id`, `item_count` | P0 |
+| `MP_templatePublish_fail` | 구현됨 | 게시 실패 | `template_id`, `error_code`, `error_message` | P1 |
+| `MP_template_apply` | 구현됨 | 실제 메인 화면 적용 행동 | `template_id`, `template_origin`, `is_default` | P0 |
+| `MP_template_delete` | 구현됨 | 템플릿 삭제 | `template_id`, `template_origin`, `sync_status` | P2 |
+| `MP_templateGallery_view` | 구현됨 | 갤러리 진입 | `entry_point` | P1 |
+| `MP_templateGallery_search` | 구현됨 | 갤러리 검색 및 정렬 사용 | `query_length`, `sort_option` | P2 |
 | `template_gallery_sort_change` | 통합됨 | 정렬 변경 | `template_gallery_search`의 `sort_option`으로 통합 | P3 |
-| `template_clone_success` | 구현됨 | 공개 템플릿 복제 성공 | `posted_template_id`, `is_author_id_present` | P1 |
-| `template_clone_fail` | 구현됨 | 복제 실패 | `posted_template_id`, `error_code`, `error_message?` | P2 |
-| `template_like_toggle` | 구현됨 | 좋아요 사용 | `posted_template_id`, `is_liked` | P2 |
+| `MP_templateClone_success` | 구현됨 | 공개 템플릿 복제 성공 | `posted_template_id`, `is_author_id_present` | P1 |
+| `MP_templateClone_fail` | 구현됨 | 복제 실패 | `posted_template_id`, `error_code`, `error_message?` | P2 |
+| `MP_template_likeToggle` | 구현됨 | 좋아요 사용 | `posted_template_id`, `is_liked` | P2 |
 
 ## Alerts / Todo / Labs Events
 
@@ -149,24 +148,24 @@ LinKU의 가장 기본 가치인 "교내외 링크를 빠르게 연다"를 측�
 
 | Event Name | 상태 | 목적 | 주요 Params | 우선순위 |
 | --- | --- | --- | --- | --- |
-| `alerts_view_open` | 구현됨 | 공지 탭 사용 여부 | `view_mode`(`all`\|`my`), `category` | P2 |
-| `alerts_item_open` | 구현됨 | 공지 클릭률 | `alert_id`, `category`, `source`(`general`\|`department`) | P2 |
-| `alerts_subscription_change` | 구현됨 | 개인화 기능 사용 | `category`, `result` | P3 |
-| `todo_view_open` | 구현됨 | Todo 기능 사용 여부 | `todo_count` | P2 |
-| `todo_item_create` | 구현됨 | Todo 입력 | `source`, `has_due_date` | P2 |
-| `todo_item_complete` | 구현됨 | Todo 완료율 | `item_type`(`custom`\|`ecampus`) | P2 |
-| `todo_item_delete` | 구현됨 | Todo 삭제 | `item_type`(`custom`\|`ecampus`) | P3 |
-| `labs_view_open` | 구현됨 | Labs 진입 | `feature_name` | P3 |
-| `labs_feature_use` | 구현됨 | Labs 세부 기능 사용 | `feature_name`, `result` | P3 |
+| `MP_alerts_view` | 구현됨 | 공지 탭 사용 여부 | `view_mode`(`all`\|`my`), `category` | P2 |
+| `MP_alertsItem_open` | 구현됨 | 공지 클릭률 | `alert_id`, `category`, `source`(`general`\|`department`) | P2 |
+| `MP_alertsSubscription_update` | 구현됨 | 개인화 기능 사용 | `category`, `result` | P3 |
+| `MP_todo_view` | 구현됨 | Todo 기능 사용 여부 | `todo_count` | P2 |
+| `MP_todoItem_create` | 구현됨 | Todo 입력 | `source`, `has_due_date` | P2 |
+| `MP_todoItem_complete` | 구현됨 | Todo 완료율 | `item_type`(`custom`\|`ecampus`) | P2 |
+| `MP_todoItem_delete` | 구현됨 | Todo 삭제 | `item_type`(`custom`\|`ecampus`) | P3 |
+| `MP_labs_open` | 구현됨 | Labs 진입 | `entry_point` | P3 |
+| `MP_labsFeature_use` | 구현됨 | Labs 세부 기능 사용 | `feature_name`, `result` | P3 |
 
 ## Settings / System Events
 
 | Event Name | 상태 | 목적 | 주요 Params | 우선순위 |
 | --- | --- | --- | --- | --- |
-| `settings_open` | 구현됨 | 설정 진입 측정 | `entry_point` | P2 |
-| `settings_credentials_saved` | 구현됨 | eCampus 계정 저장 | `result`=`success` | P1 |
-| `settings_credentials_deleted` | 구현됨 | eCampus 계정 삭제 | `result`=`success` | P2 |
-| `system_error` | 구현됨 | runtime 오류 집계 | `error_code`, `error_message`, `screen_name?` | P1 |
+| `MP_settings_open` | 구현됨 | 설정 진입 측정 | `entry_point` | P2 |
+| `MP_settingsCredentials_save` | 구현됨 | eCampus 계정 저장 | `result`=`success` | P1 |
+| `MP_settingsCredentials_delete` | 구현됨 | eCampus 계정 삭제 | `result`=`success` | P2 |
+| `error` | 구현됨 | runtime 오류 집계 | `error_code`, `error_message`, `screen_name?` | P1 |
 
 ## Migration History
 
@@ -174,11 +173,11 @@ LinKU의 가장 기본 가치인 "교내외 링크를 빠르게 연다"를 측�
 
 | 구 이벤트 | 대체된 이벤트 |
 | --- | --- |
-| `page_view` | 유지 (sendExtensionOpen과 함께 sendPageView 병렬 호출) |
+| `page_view` | 유지 (`sendExtensionOpen` 이후 `sendPageView` 순차 호출) |
 | `search` | `MP_search_submit` |
 | `tab_change` | 유지 (sendTabChange — 연속성 보존) |
 | `link_click` | 유지 (sendLinkClick — 연속성 보존, 파라미터 link_group/same_host_variant 추가) |
-| `setting_change` | 유지 + `MP_settingsCredentials_save` / `MP_settingsCredentials_delete` 병렬 발송 |
+| `setting_change` | 유지 + `MP_settingsCredentials_save` / `MP_settingsCredentials_delete`와 같은 요청에서 발송 |
 | `error` | 유지 (sendError — 연속성 보존, 파라미터 error_code/screen_name 추가) |
 | `button_click("google_login")` | `MP_authLogin_start` + `MP_authLogin_success` / `MP_authLogin_fail` |
 | `button_click("google_logout")` | `MP_auth_logout` |
@@ -214,42 +213,56 @@ LinKU의 가장 기본 가치인 "교내외 링크를 빠르게 연다"를 측�
 | `labs_feature_use` | `MP_labsFeature_use` | prefix + camelCase object |
 | `banner_open` | `MP_banner_open` | prefix 적용 |
 
+### lifecycle MP_ prefix 정리 (2026-05-13)
+
+초기 구현은 lifecycle 이벤트를 `extension_*`로 보냈지만, 이후 모든 신규 이벤트를
+`MP_` prefix로 맞추기 위해 아래 이름으로 전환한다. 기존 `extension_*` 데이터는 GA4에서
+직접 rename할 수 없으므로 cutover 이전 데이터로만 해석한다.
+
+| 구 이벤트명 | 신규 이벤트명 | 사유 |
+| --- | --- | --- |
+| `extension_first_open` | `MP_extension_firstOpen` | lifecycle도 신규 MP taxonomy로 통일 |
+| `extension_session_start` | `MP_extensionSession_start` | session 계열 camelCase 컨벤션 적용 |
+| `extension_open` | `MP_extension_open` | popup open 지표를 MP prefix 기준으로 통일 |
+| `extension_day_active` | `MP_extensionDay_active` | daily retention 이벤트를 MP prefix 기준으로 통일 |
+| `extension_day_summary` | `MP_extensionDay_summary` | daily summary 이벤트를 MP prefix 기준으로 통일 |
+
 ## MVP Recommendation
 
 가장 먼저 붙일 이벤트 묶음이다. 이 정도면 GA4 Explore에서 기본 retention과 핵심 사용 흐름을 볼 수 있다.
 
 | 순위 | 이벤트 | 상태 |
 | --- | --- | --- |
-| P0 | `extension_first_open` | 구현됨 |
-| P0 | `extension_session_start` | 구현됨 |
-| P0 | `extension_open` | 구현됨 |
-| P0 | `extension_day_active` | 구현됨 |
-| P0 | `extension_day_summary` | 구현됨 |
-| P0 | `link_open` | 구현됨 |
-| P0 | `template_save_success` | 구현됨 |
-| P0 | `template_sync_success` | 구현됨 |
-| P0 | `template_publish_success` | 구현됨 |
-| P0 | `template_apply` | 구현됨 |
-| P1 | `auth_login_start` | 구현됨 |
-| P1 | `auth_login_success` | 구현됨 |
-| P1 | `auth_email_verification_success` | 구현됨 |
-| P1 | `template_editor_open` | 구현됨 |
-| P1 | `template_item_add` | 구현됨 |
-| P1 | `system_error` | 구현됨 |
+| P0 | `MP_extension_firstOpen` | 구현됨 |
+| P0 | `MP_extensionSession_start` | 구현됨 |
+| P0 | `MP_extension_open` | 구현됨 |
+| P0 | `MP_extensionDay_active` | 구현됨 |
+| P0 | `MP_extensionDay_summary` | 구현됨 |
+| P0 | `link_click` | 구현됨 |
+| P0 | `MP_templateSave_success` | 구현됨 |
+| P0 | `MP_templateSync_success` | 구현됨 |
+| P0 | `MP_templatePublish_success` | 구현됨 |
+| P0 | `MP_template_apply` | 구현됨 |
+| P1 | `MP_authLogin_start` | 구현됨 |
+| P1 | `MP_authLogin_success` | 구현됨 |
+| P1 | `MP_authEmailVerification_success` | 구현됨 |
+| P1 | `MP_templateEditor_view` | 구현됨 |
+| P1 | `MP_templateItem_add` | 구현됨 |
+| P1 | `error` | 구현됨 |
 
 ## Suggested Explore Reports
 
 | 리포트 | 포함 이벤트 |
 | --- | --- |
-| Daily active devices | `extension_day_active` |
-| Day N retention cohort | `extension_day_active` + `cohort_date` + `days_since_cohort` |
-| Returning user rate | `extension_day_active` + `is_returning` |
-| Visits per active user | `extension_day_summary.open_count` / `extension_day_active` |
-| Sessions per active user | `extension_day_summary.session_count` / `extension_day_active` |
-| Session-based return cohort | `extension_session_start` |
-| Core action retention | `extension_first_open` cohort + `link_open` return condition |
-| Template funnel | `template_editor_open` → `template_item_add` → `template_save_success` → `template_sync_success` → `template_publish_success` |
-| Auth funnel | `auth_login_start` → `auth_login_success` → `auth_email_verification_success` |
+| Daily active devices | `MP_extensionDay_active` |
+| Day N retention cohort | `MP_extensionDay_active` + `cohort_date` + `days_since_cohort` |
+| Returning user rate | `MP_extensionDay_active` + `is_returning` |
+| Visits per active user | `MP_extensionDay_summary.open_count` / `MP_extensionDay_active` |
+| Sessions per active user | `MP_extensionDay_summary.session_count` / `MP_extensionDay_active` |
+| Session-based return cohort | `MP_extensionSession_start` |
+| Core action retention | `MP_extension_firstOpen` cohort + `link_click` return condition |
+| Template funnel | `MP_templateEditor_view` → `MP_templateItem_add` → `MP_templateSave_success` → `MP_templateSync_success` → `MP_templatePublish_success` |
+| Auth funnel | `MP_authLogin_start` → `MP_authLogin_success` → `MP_authEmailVerification_success` |
 
 ## Non-Goals
 
@@ -270,25 +283,25 @@ LinKU의 가장 기본 가치인 "교내외 링크를 빠르게 연다"를 측�
 
 | 이벤트명 | 항목 | 수집 목적 | 수집 속성 | 사용 코드 | 비고 |
 | --- | --- | --- | --- | --- | --- |
-| `button_click` | 버튼 클릭 | 미승격 버튼 범용 클릭 | `button_name`, `button_location?` | `MainLayout.tsx` (logo·settings·github), `SettingsDialog.tsx` (password_toggle·open_template_list) | 제품 의미 큰 버튼은 개별 MP_ 이벤트로 승격 |
+| `button_click` | 버튼 클릭 | 미승격 버튼 범용 클릭 | `button_name`, `button_location?` | `MainLayout.tsx` (logo·github), `SettingsDialog.tsx` (password_toggle·open_template_list) | 제품 의미 큰 버튼은 개별 MP_ 이벤트로 승격 |
 | `error` | 렌더 오류 발생 | runtime 오류 집계 | `error_code`, `error_message`, `screen_name?` | `App.tsx · ErrorBoundary onError` | React 렌더 오류만 포착 |
 | `link_click` | 링크 클릭 | LinKU 핵심 가치 행동 측정 | `link_name`, `link_url`, `link_group?`, `same_host_variant?` | `LinkGroup.tsx · GridItem onClick`, `GridItemSameHost onClick` | - |
 | `page_view` | 팝업 열기 | 실제 사용 시작 기록 (레거시) | `page_title`, `page_location`, `page_referrer` | `App.tsx · useEffect → sendPageView` | sendExtensionOpen과 함께 호출 |
-| `setting_change` | 계정 정보 변경 | eCampus 자격증명 변경 파악 (레거시) | `setting_name`, `setting_value` | `SettingsDialog.tsx` 내부 병렬 발송 | MP_settingsCredentials_* 와 동시 발화 |
+| `setting_change` | 계정 정보 변경 | eCampus 자격증명 변경 파악 (레거시) | `setting_name`, `setting_value` | `SettingsDialog.tsx` 내부에서 MP_settingsCredentials_*와 같은 요청으로 발송 | MP_settingsCredentials_* 와 동시 발화 |
 | `tab_change` | 탭 선택 | 탭 사용 패턴 파악 | `tab_name`, `feature_area?` | `TabsLayout.tsx · handleTabChange` | - |
 
 ### 신규 이벤트 (택소노미 정립 후, MP_ prefix)
 
 | 이벤트명 | 항목 | 수집 목적 | 수집 속성 | 사용 코드 | 비고 |
 | --- | --- | --- | --- | --- | --- |
-| `extension_day_active` | 일별 활성 | 정확한 DAU와 Day N retention | `active_date`, `cohort_date`, `cohort_week`, `cohort_source`, `days_since_cohort`, `is_returning`, `app_language`, `extension_version`, `daily_session_count`, `daily_open_count` | `App.tsx · sendExtensionOpen` 내부 자동 처리 | analytics date별 기기당 1회 |
-| `extension_day_summary` | 전일 사용량 요약 | 일별 세션/방문 집계 | `summary_date`, `cohort_date`, `days_since_cohort`, `session_count`, `open_count`, `app_language`, `extension_version` | `App.tsx · sendExtensionOpen` 내부 자동 처리 | 다음 날 첫 실행 시 전날 요약 전송 |
-| `extension_first_open` | 최초 실행 | 첫 사용 cohort 정의 | `screen_name`, `entry_point` | `App.tsx · sendExtensionOpen` 내부 자동 처리 | `firstOpenSent` 플래그로 기기당 1회 보장 |
-| `extension_open` | 팝업 열기 | 실제 사용 시작 기록 | `screen_name`, `entry_point` | `App.tsx · useEffect → sendExtensionOpen` | - |
-| `extension_session_start` | 세션 시작 | 세션 기준 정의 | `screen_name`, `entry_point` | `App.tsx · sendExtensionOpen` 내부 자동 처리 | 30분 inactivity 초과 시에만 전송 |
+| `MP_extensionDay_active` | 일별 활성 | 정확한 DAU와 Day N retention | `active_date`, `cohort_date`, `cohort_week`, `cohort_source`, `days_since_cohort`, `is_returning`, `app_language`, `extension_version`, `daily_session_count`, `daily_open_count` | `App.tsx · sendExtensionOpen` 내부 자동 처리 | analytics date별 기기당 1회 |
+| `MP_extensionDay_summary` | 전일 사용량 요약 | 일별 세션/방문 집계 | `summary_date`, `cohort_date`, `days_since_cohort`, `session_count`, `open_count`, `app_language`, `extension_version` | `App.tsx · sendExtensionOpen` 내부 자동 처리 | 다음 날 첫 실행 시 전날 요약 전송 |
+| `MP_extension_firstOpen` | 최초 실행 | 첫 사용 cohort 정의 | `screen_name`, `entry_point` | `App.tsx · sendExtensionOpen` 내부 자동 처리 | `firstOpenSent` 플래그로 기기당 1회 보장 |
+| `MP_extension_open` | 팝업 열기 | 실제 사용 시작 기록 | `screen_name`, `entry_point` | `App.tsx · useEffect → sendExtensionOpen` | - |
+| `MP_extensionSession_start` | 세션 시작 | 세션 기준 정의 | `screen_name`, `entry_point` | `App.tsx · sendExtensionOpen` 내부 자동 처리 | 30분 inactivity 초과 시에만 전송 |
 | `MP_alerts_view` | 공지 탭 진입 | 공지 탭 사용 여부 | `view_mode`, `category` | `Alerts.tsx · initialize()` | - |
 | `MP_alertsItem_open` | 공지 클릭 | 공지 클릭률 측정 | `alert_id`, `category`, `source` | `AlertItem.tsx · handleClick` | - |
-| `MP_alertsSubscription_update` | 구독 변경 | 학과 구독 변경 파악 | `category`, `subscription_result`(`subscribe`\|`unsubscribe`) | `SubscriptionManager.tsx · handleSubscribe`, `handleUnsubscribe` | - |
+| `MP_alertsSubscription_update` | 구독 변경 | 학과 구독 변경 파악 | `category`, `result`(`subscribe`\|`unsubscribe`) | `SubscriptionManager.tsx · handleSubscribe`, `handleUnsubscribe` | - |
 | `MP_authEmailVerification_start` | 이메일 인증 시작 | 게스트→회원 전환 시작점 | `ui_location` | `EmailVerificationDialog.tsx · useEffect([open])` | 다이얼로그 재진입마다 전송 → funnel 시작 수 과집계 가능 |
 | `MP_authEmailVerification_success` | 이메일 인증 완료 | 회원 전환 완료 | `domain_type` | `EmailVerificationDialog.tsx · handleVerifyCode` | - |
 | `MP_authLogin_fail` | 로그인 실패 | 로그인 장애 파악 | `provider`, `error_code`, `error_message` | `SettingsDialog.tsx · handleGoogleLogin` (결과·예외 분기) | - |
@@ -297,11 +310,11 @@ LinKU의 가장 기본 가치인 "교내외 링크를 빠르게 연다"를 측�
 | `MP_auth_logout` | 로그아웃 | 로그아웃 행동 파악 | `ui_location` | `SettingsDialog.tsx · handleLogout` | - |
 | `MP_banner_open` | 배너 클릭 | 배너 클릭 효율 측정 | `banner_id`, `banner_title`, `banner_position` | `ImageCarousel.tsx · Image onClick` | - |
 | `MP_labsFeature_use` | Labs 기능 사용 | Labs 기능 사용 측정 | `feature_name`, `result?` | `QRGeneratorSection.tsx · regenerate()`, `LibrarySeatSection.tsx · handleOpenRoom` | ServerClockSection 미연결 |
-| `MP_labs_open` | Labs 다이얼로그 진입 | Labs 탭 진입 파악 | (없음) | `LabsDialog.tsx · useEffect([open])` | - |
-| `MP_search_submit` | 검색 실행 | 검색 기능 사용률 측정 | `search_term`, `search_location?` | `MainLayout.tsx · Header onKeyDown(Enter)` | - |
-| `MP_settings_open` | 설정 열기 | 설정 진입 측정 | `entry_point` | `MainLayout.tsx · Settings onClick` | button_click(settings_icon)과 중복 없음 (sendSettingsOpen 직접 중복 제거됨) |
-| `MP_settingsCredentials_delete` | 계정 정보 삭제 | eCampus 계정 삭제 파악 | `result`(=`success`) | `SettingsDialog.tsx · deleteCredentials` | setting_change 레거시와 병렬 발송 |
-| `MP_settingsCredentials_save` | 계정 정보 저장 | eCampus 계정 저장 파악 | `result`(=`success`) | `SettingsDialog.tsx · saveCredentials` | setting_change 레거시와 병렬 발송 |
+| `MP_labs_open` | Labs 다이얼로그 진입 | Labs 탭 진입 파악 | `entry_point` | `LabsDialog.tsx · useEffect([open])` | 현재 진입점은 `header` |
+| `MP_search_submit` | 검색 실행 | 검색 기능 사용률 측정 | `query_length`, `search_location?` | `MainLayout.tsx · Header onKeyDown(Enter)` | 검색어 원문은 전송하지 않음 |
+| `MP_settings_open` | 설정 열기 | 설정 진입 측정 | `entry_point` | `MainLayout.tsx · Settings onClick` | `button_click(settings_icon)` 중복 제거 |
+| `MP_settingsCredentials_delete` | 계정 정보 삭제 | eCampus 계정 삭제 파악 | `result`(=`success`) | `SettingsDialog.tsx · deleteCredentials` | `setting_change` 레거시와 같은 MP request에 배치 전송 |
+| `MP_settingsCredentials_save` | 계정 정보 저장 | eCampus 계정 저장 파악 | `result`(=`success`) | `SettingsDialog.tsx · saveCredentials` | `setting_change` 레거시와 같은 MP request에 배치 전송 |
 | `MP_template_apply` | 템플릿 적용 | 메인 화면 적용 — 핵심 가치 행동 | `template_id`, `template_origin`, `is_default` | `TemplateListPage.tsx · handleApplyTemplate` | - |
 | `MP_template_createStart` | 템플릿 생성 시작 | 새 템플릿 생성 진입 | `template_origin`(`default`\|`empty`) | `TemplateListPage.tsx · handleCreateFromDefault`, `handleCreateEmpty` | - |
 | `MP_template_delete` | 템플릿 삭제 | 템플릿 삭제 파악 | `template_id`, `template_origin`, `sync_status` | `TemplateListPage.tsx · handleDeleteTemplate` | - |

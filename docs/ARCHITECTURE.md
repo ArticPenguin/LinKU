@@ -91,7 +91,7 @@ route는 `src/routes.tsx`에 정의되어 있습니다.
 - `/gallery`: public posted-template gallery.
 - `*`: not found page.
 
-`src/App.tsx`는 root error boundary, global providers, page-view analytics,
+`src/App.tsx`는 root error boundary, global providers, popup startup analytics,
 toast rendering을 제공합니다.
 
 ## 소스 구조
@@ -151,6 +151,7 @@ background worker가 처리하는 일:
 
 - Google login request.
 - Silent reauth request.
+- GA4 Measurement Protocol dispatch와 실패 요청 queue flush.
 - Extension install/update event.
 - Badge count initialization.
 - `chrome.storage.local` 변경에 따른 badge count update.

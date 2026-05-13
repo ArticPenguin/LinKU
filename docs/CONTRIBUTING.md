@@ -143,17 +143,20 @@ review 요청 전 다음 내용을 포함하세요.
 권장 local check:
 
 ```bash
+pnpm run test
 pnpm run build:local
 pnpm run lint
 ```
 
-현재 CI는 PR에서 `pnpm run build:local`을 실행합니다. shared code, React hooks,
-TypeScript utility를 변경했다면 가능한 한 local에서 lint도 실행하세요.
+현재 CI는 PR에서 `pnpm run build:local`을 실행합니다. analytics, storage,
+background message handler, shared TypeScript utility를 변경했다면 local에서
+`pnpm run test`도 실행하세요. shared code, React hooks, TypeScript utility를
+변경했다면 가능한 한 lint도 실행하세요.
 
-현재 프로젝트에는 Prettier, Stylelint, Husky, lint-staged, test framework,
-pre-commit hook이 없습니다. formatting과 test coverage는 자동으로 보장되지
-않으므로, 변경 범위에 맞는 manual verification을 PR 설명에 남기는 것이
-중요합니다.
+현재 프로젝트에는 Vitest 기반 단위 테스트가 있습니다. 다만 Prettier, Stylelint,
+Husky, lint-staged, pre-commit hook은 없습니다. formatting과 extension runtime
+behavior는 자동으로 보장되지 않으므로, 변경 범위에 맞는 manual verification을
+PR 설명에 남기는 것이 중요합니다.
 
 ## 수동 테스트 가이드
 
@@ -193,8 +196,8 @@ resize, template list로 돌아가는 navigation을 확인하세요.
 - MV3 background code는 `src/background/`에 둡니다.
 
 feature PR 안에서 새로운 state library, router, styling system, formatter,
-test framework를 도입하지 마세요. 그런 변경은 별도 tooling decision PR로
-다루는 것이 좋습니다.
+또는 추가 test framework를 도입하지 마세요. 그런 변경은 별도 tooling decision
+PR로 다루는 것이 좋습니다.
 
 ## Chrome 권한 정책
 
