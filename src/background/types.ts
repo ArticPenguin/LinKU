@@ -11,6 +11,7 @@ import type { GoogleOAuthResponse } from '../types/api';
 export enum BackgroundMessageType {
   GOOGLE_LOGIN = 'GOOGLE_LOGIN',
   SILENT_REAUTH = 'SILENT_REAUTH',
+  ANALYTICS_EVENT = 'ANALYTICS_EVENT',
 }
 
 /**
@@ -19,6 +20,27 @@ export enum BackgroundMessageType {
 export interface BackgroundMessage<T = unknown> {
   type: BackgroundMessageType;
   data?: T;
+}
+
+/**
+ * Analytics dispatch request message
+ * Carries a fully-built Measurement Protocol request to the background worker.
+ */
+export interface AnalyticsDispatchData {
+  payload: unknown;
+  url: string;
+}
+
+export interface AnalyticsDispatchMessage
+  extends BackgroundMessage<AnalyticsDispatchData> {
+  type: BackgroundMessageType.ANALYTICS_EVENT;
+  data: AnalyticsDispatchData;
+}
+
+export interface AnalyticsDispatchResponse {
+  success: boolean;
+  queued?: boolean;
+  error?: string;
 }
 
 /**
@@ -81,4 +103,19 @@ export function isSilentReauthMessage(
   message: BackgroundMessage
 ): message is SilentReauthMessage {
   return message.type === BackgroundMessageType.SILENT_REAUTH;
+}
+
+/**
+ * Type guard for analytics dispatch messages.
+ */
+export function isAnalyticsDispatchMessage(
+  message: BackgroundMessage
+): message is AnalyticsDispatchMessage {
+  return (
+    message.type === BackgroundMessageType.ANALYTICS_EVENT &&
+    typeof message.data === "object" &&
+    message.data !== null &&
+    typeof (message.data as AnalyticsDispatchData).url === "string" &&
+    "payload" in message.data
+  );
 }

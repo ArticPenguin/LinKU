@@ -10,6 +10,7 @@
 
 import {
   BackgroundMessageType,
+  isAnalyticsDispatchMessage,
   isGoogleLoginMessage,
   isSilentReauthMessage,
 } from "./types";
@@ -19,6 +20,7 @@ import type {
   GoogleLoginResponse,
   SilentReauthResponse,
 } from "./types";
+import { flushAnalyticsQueue, handleAnalyticsDispatch } from "./handlers/analytics";
 import { handleGoogleLogin } from "./handlers/oauth";
 
 debugLog("[Background] Service worker initialized");
@@ -110,6 +112,26 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
+    if (isAnalyticsDispatchMessage(typedMessage)) {
+      handleAnalyticsDispatch(typedMessage.data)
+        .then(sendResponse)
+        .catch((error: unknown) => {
+          warnLog(
+            "[Background] Analytics dispatch error",
+            getErrorLogDetails(error),
+          );
+          sendResponse({
+            success: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Analytics dispatch failed",
+          });
+        });
+
+      return true;
+    }
+
     // Unknown message type
     const unknownType = (message as { type: string }).type;
     warnLog("[Background] Unknown message type", { type: unknownType });
@@ -127,6 +149,7 @@ chrome.runtime.onMessage.addListener(
  */
 chrome.runtime.onInstalled.addListener((details) => {
   debugLog("[Background] Extension installed/updated:", details.reason);
+  void flushAnalyticsQueue();
 
   if (details.reason === "install") {
     debugLog("[Background] First install - welcome!");
@@ -140,6 +163,7 @@ chrome.runtime.onInstalled.addListener((details) => {
  */
 chrome.runtime.onStartup.addListener(() => {
   debugLog("[Background] Browser started, service worker activated");
+  void flushAnalyticsQueue();
 });
 
 /**

@@ -8,20 +8,14 @@ import { Outlet } from "react-router-dom";
 import { ErrorBoundary } from "react-error-boundary";
 import { Toaster } from "./components/ui/sonner";
 import { PostedTemplatesProvider } from "./contexts/PostedTemplatesContext";
-import { sendExtensionOpen, sendPageView, sendError } from "./utils/analytics";
-import { debugLog } from "@/utils/logger";
+import { sendError } from "./utils/analytics";
+import { runPopupStartupAnalytics } from "./utils/popupStartupAnalytics";
 import "./App.css";
 
 function App() {
-  // GA4: popup mount 시 first_open / session_start / extension_open 자동 전송
+  // GA4: popup mount 시 MP lifecycle 이벤트와 page_view를 순서대로 전송
   useEffect(() => {
-    debugLog(
-      "%c여길 열어보시다니...\n이 참에 직접 코드 기여도 해주시는 건 어떤가요?",
-      "font-family: Nanum Gothic; color: darkgreen; padding: 6px; border-radius: 4px; font-size:14px",
-    );
-    debugLog("https://github.com/Turtle-Hwan/LinKU");
-    sendExtensionOpen("popup_home", "popup");
-    sendPageView("LinKU Extension - Popup");
+    void runPopupStartupAnalytics();
   }, []);
 
   return (

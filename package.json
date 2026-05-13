@@ -15,6 +15,7 @@
     "build:gh-pages": "tsc -b && vite build --mode gh-pages",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test": "vitest run",
     "deploy": "git subtree push --prefix gh-pages origin gh-pages"
   },
   "dependencies": {
@@ -61,7 +62,8 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.57.2",
     "vite": "^8.0.3",
-    "vite-plugin-svgr": "^4.5.0"
+    "vite-plugin-svgr": "^4.5.0",
+    "vitest": "^4.1.5"
   },
   "pnpm": {
     "overrides": {
